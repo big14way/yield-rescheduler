@@ -1,0 +1,26 @@
+[project]
+name = "yield-scheduler"
+description = "Time-based yield scheduler with custom reward schedules using Clarity 4"
+authors = ["Builder"]
+telemetry = false
+cache_dir = "./.cache"
+requirements = []
+
+[contracts.yield-scheduler]
+path = "contracts/yield-scheduler.clar"
+clarity_version = 4
+epoch = 3.3
+
+[contracts.reward-token]
+path = "contracts/reward-token.clar"
+clarity_version = 4
+epoch = 3.3
+
+[repl.analysis]
+passes = ["check_checker"]
+
+[repl.analysis.check_checker]
+strict = false
+trusted_sender = false
+trusted_caller = false
+callee_filter = false

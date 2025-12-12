@@ -1,0 +1,41 @@
+# Clarinet
+.cache/
+costs-reports.json
+requirements.txt
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Deno
+.deno/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+*.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Deployment
+deployments/local/
+deployments/testnet/
+deployments/mainnet/
+
+# Build artifacts
+*.wasm

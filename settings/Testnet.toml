@@ -1,0 +1,6 @@
+[network]
+name = "testnet"
+
+[accounts.deployer]
+mnemonic = "truly expect gap defy sibling pudding priority iron final misery silk bar lift behave able enrich rose ice cage pipe surround fold mango pulse"
+# Address: ST1S3R27KWS78BZQJ3XF3BQK89VZTHHCPZMD3TTTK

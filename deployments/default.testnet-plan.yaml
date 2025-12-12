@@ -1,0 +1,25 @@
+---
+id: 0
+name: Testnet deployment
+network: testnet
+stacks-node: "https://api.testnet.hiro.so"
+bitcoin-node: "http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332"
+plan:
+  batches:
+    - id: 0
+      transactions:
+        - contract-publish:
+            contract-name: reward-token
+            expected-sender: ST1S3R27KWS78BZQJ3XF3BQK89VZTHHCPZMD3TTTK
+            cost: 22150
+            path: contracts/reward-token.clar
+            anchor-block-only: true
+            clarity-version: 4
+        - contract-publish:
+            contract-name: yield-scheduler
+            expected-sender: ST1S3R27KWS78BZQJ3XF3BQK89VZTHHCPZMD3TTTK
+            cost: 115130
+            path: contracts/yield-scheduler.clar
+            anchor-block-only: true
+            clarity-version: 4
+      epoch: "3.3"
