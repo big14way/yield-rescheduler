@@ -267,6 +267,71 @@ With 2x weekend bonus (approx 28% of year):
 Effective APY ≈ 6.5%
 ```
 
+## Hiro Chainhooks Integration
+
+This project includes a **Hiro Chainhooks** implementation for real-time monitoring of staking activity, reward distributions, and pool performance metrics.
+
+### Features
+
+✅ **Real-time Pool Tracking**: Monitor pool creation, staking, unstaking, and reward claims
+✅ **User Analytics**: Track staker participation, compound frequency, and retention
+✅ **Reward Monitoring**: Calculate and track total rewards distributed across all pools
+✅ **Schedule Analytics**: Monitor bonus period effectiveness and multiplier usage
+✅ **Reorg-Resistant**: Chainhook's built-in protection against blockchain reorganizations
+
+### Tracked Events
+
+| Event | Contract Function | Data Collected |
+|-------|------------------|----------------|
+| Pool Created | `create-pool` | Name, reward rate, schedule type, min stake |
+| Tokens Staked | `stake` | Pool ID, staker, amount, timestamp |
+| Tokens Unstaked | `unstake` | Pool ID, staker, amount, cooldown check |
+| Rewards Claimed | `claim-rewards` | Pool ID, staker, reward amount |
+| Rewards Compounded | `compound` | Pool ID, staker, compounded amount |
+| Bonus Schedule Added | `add-bonus-schedule` | Pool ID, multiplier, start time, duration |
+| Pool Funded | `fund-rewards-pool` | Pool ID, amount added |
+
+### Analytics Output
+
+The Chainhooks observer generates real-time analytics:
+
+```json
+{
+  "totalPools": 15,
+  "uniqueStakers": 234,
+  "totalStaked": 45000000000,
+  "totalRewardsDistributed": 2340000000,
+  "totalRewardsClaimed": 1890000000,
+  "totalCompounds": 567,
+  "activeSchedules": 23,
+  "pools": [...],
+  "stakes": [...],
+  "claims": [...],
+  "timestamp": "2025-12-16T10:30:00.000Z"
+}
+```
+
+### Quick Start
+
+```bash
+cd chainhooks
+npm install
+cp .env.example .env
+# Edit .env with your configuration
+npm start
+```
+
+For detailed setup and configuration, see [chainhooks/README.md](./chainhooks/README.md).
+
+### Use Cases
+
+- **Pool Dashboard**: Real-time metrics for TVL, APY, and reward distributions
+- **Staker Analytics**: Track user behavior, compound frequency, and retention rates
+- **Schedule Optimization**: Analyze bonus period effectiveness and multiplier impact
+- **Compliance Monitoring**: Audit trail of all staking operations and reward distributions
+- **Risk Management**: Monitor pool health, reward pool balances, and withdrawal patterns
+- **Marketing Analytics**: Measure campaign effectiveness through staking activity spikes
+
 ## License
 
 MIT License
