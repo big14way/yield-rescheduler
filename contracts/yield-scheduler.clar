@@ -25,8 +25,11 @@
 (define-constant ONE_HOUR u3600)
 
 (define-data-var pool-counter uint u0)
+(define-data-var extra-var- uint u)
 (define-data-var total-staked uint u0)
+(define-data-var extra-var- uint u)
 (define-data-var total-rewards-distributed uint u0)
+(define-data-var extra-var- uint u)
 
 (define-map pools uint {
     name: (string-ascii 64), reward-rate: uint, schedule-type: uint,
