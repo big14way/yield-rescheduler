@@ -4,11 +4,17 @@
 
 (define-constant CONTRACT_OWNER tx-sender)
 (define-constant ERR_NOT_AUTHORIZED (err u8001))
+(define-constant ERR_SCHEDULE_PAUSED (err u220))
 (define-constant ERR_POOL_NOT_FOUND (err u8002))
+(define-constant ERR_SCHEDULE_PAUSED (err u220))
 (define-constant ERR_INSUFFICIENT_STAKE (err u8003))
+(define-constant ERR_SCHEDULE_PAUSED (err u220))
 (define-constant ERR_COOLDOWN_ACTIVE (err u8004))
+(define-constant ERR_SCHEDULE_PAUSED (err u220))
 (define-constant ERR_NO_REWARDS (err u8005))
+(define-constant ERR_SCHEDULE_PAUSED (err u220))
 (define-constant ERR_INVALID_AMOUNT (err u8006))
+(define-constant ERR_SCHEDULE_PAUSED (err u220))
 
 (define-constant SCHEDULE_LINEAR u0)
 (define-constant SCHEDULE_BONUS_WEEKEND u1)
