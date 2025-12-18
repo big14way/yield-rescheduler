@@ -219,3 +219,4 @@
         (ok true)))
 (define-data-var analytics-2 uint u2)
 (define-data-var analytics-3 uint u3)
+(define-data-var analytics-4 uint u4)
