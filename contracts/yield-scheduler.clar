@@ -218,3 +218,4 @@
         (print { event: "pool-status-changed", pool-id: pool-id, active: active, admin: tx-sender })
         (ok true)))
 (define-data-var analytics-2 uint u2)
+(define-data-var analytics-3 uint u3)
