@@ -11,6 +11,8 @@
 (define-constant ERR_INVALID_AMOUNT (err u8006))
 (define-constant ERR_SCHEDULE_PAUSED (err u8007))
 (define-constant ERR_COMPOUND_FAILED (err u8008))
+(define-constant ERR_MIGRATION_FAILED (err u8009))
+(define-constant ERR_SAME_POOL (err u8010))
 
 (define-constant SCHEDULE_LINEAR u0)
 (define-constant SCHEDULE_BONUS_WEEKEND u1)
@@ -25,6 +27,8 @@
 (define-data-var total-rewards-distributed uint u0)
 (define-data-var compound-enabled bool true)
 (define-data-var min-compound-amount uint u1000000)
+(define-data-var migration-enabled bool true)
+(define-data-var migration-fee-percent uint u100)
 
 (define-map pools uint {
     name: (string-ascii 64), reward-rate: uint, schedule-type: uint,
@@ -280,3 +284,100 @@
                 (ok compound-apy))
             (err ERR_POOL_NOT_FOUND))
         (err ERR_INSUFFICIENT_STAKE)))
+
+;; ========================================
+;; Pool Migration Functions
+;; ========================================
+
+;; Migrate stake from one pool to another
+(define-public (migrate-stake (from-pool-id uint) (to-pool-id uint))
+    (let ((from-pool (unwrap! (map-get? pools from-pool-id) ERR_POOL_NOT_FOUND))
+          (to-pool (unwrap! (map-get? pools to-pool-id) ERR_POOL_NOT_FOUND))
+          (stake-info (unwrap! (map-get? stakes { pool-id: from-pool-id, staker: tx-sender }) ERR_INSUFFICIENT_STAKE))
+          (amount (get amount stake-info))
+          (pending-rewards (calculate-pending-rewards from-pool-id tx-sender))
+          (migration-fee (/ (* amount (var-get migration-fee-percent)) u10000))
+          (net-amount (- amount migration-fee)))
+        ;; Validations
+        (asserts! (var-get migration-enabled) ERR_MIGRATION_FAILED)
+        (asserts! (not (is-eq from-pool-id to-pool-id)) ERR_SAME_POOL)
+        (asserts! (get active from-pool) ERR_POOL_NOT_FOUND)
+        (asserts! (get active to-pool) ERR_POOL_NOT_FOUND)
+        (asserts! (>= net-amount (get min-stake to-pool)) ERR_INSUFFICIENT_STAKE)
+        (asserts! (>= amount u0) ERR_INSUFFICIENT_STAKE)
+
+        ;; Claim pending rewards before migration
+        (if (> pending-rewards u0)
+            (begin
+                (map-set stakes { pool-id: from-pool-id, staker: tx-sender }
+                    (merge stake-info {
+                        last-claim: stacks-block-time,
+                        rewards-earned: (+ (get rewards-earned stake-info) pending-rewards)
+                    }))
+                (map-set pools from-pool-id
+                    (merge from-pool {
+                        rewards-pool: (- (get rewards-pool from-pool) pending-rewards)
+                    }))
+                (var-set total-rewards-distributed (+ (var-get total-rewards-distributed) pending-rewards))
+                true)
+            true)
+
+        ;; Remove stake from source pool
+        (map-delete stakes { pool-id: from-pool-id, staker: tx-sender })
+        (map-set pools from-pool-id (merge from-pool {
+            total-staked: (- (get total-staked from-pool) amount)
+        }))
+
+        ;; Add stake to destination pool
+        (let ((existing-to-stake (default-to { amount: u0, staked-at: u0, last-claim: u0, rewards-earned: u0, cooldown-end: u0 }
+                                             (map-get? stakes { pool-id: to-pool-id, staker: tx-sender }))))
+            (map-set stakes { pool-id: to-pool-id, staker: tx-sender } {
+                amount: (+ (get amount existing-to-stake) net-amount),
+                staked-at: (if (is-eq (get amount existing-to-stake) u0) stacks-block-time (get staked-at existing-to-stake)),
+                last-claim: stacks-block-time,
+                rewards-earned: (get rewards-earned existing-to-stake),
+                cooldown-end: u0
+            })
+            (map-set pools to-pool-id (merge to-pool {
+                total-staked: (+ (get total-staked to-pool) net-amount)
+            })))
+
+        ;; Update total staked (accounting for migration fee)
+        (var-set total-staked (- (var-get total-staked) migration-fee))
+
+        (print {
+            event: "stake-migrated",
+            from-pool: from-pool-id,
+            to-pool: to-pool-id,
+            staker: tx-sender,
+            amount: amount,
+            fee: migration-fee,
+            net-amount: net-amount,
+            pending-rewards-claimed: pending-rewards,
+            timestamp: stacks-block-time
+        })
+        (ok net-amount)))
+
+;; Toggle migration feature (admin only)
+(define-public (toggle-migration)
+    (begin
+        (asserts! (is-eq tx-sender CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
+        (var-set migration-enabled (not (var-get migration-enabled)))
+        (print { event: "migration-toggled", enabled: (var-get migration-enabled), admin: tx-sender })
+        (ok (var-get migration-enabled))))
+
+;; Set migration fee percent (admin only) - in basis points (100 = 1%)
+(define-public (set-migration-fee (fee-percent uint))
+    (begin
+        (asserts! (is-eq tx-sender CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
+        (asserts! (<= fee-percent u1000) ERR_INVALID_AMOUNT) ;; Max 10%
+        (var-set migration-fee-percent fee-percent)
+        (print { event: "migration-fee-updated", fee-percent: fee-percent, admin: tx-sender })
+        (ok true)))
+
+;; Get migration configuration
+(define-read-only (get-migration-config)
+    {
+        enabled: (var-get migration-enabled),
+        fee-percent: (var-get migration-fee-percent)
+    })
