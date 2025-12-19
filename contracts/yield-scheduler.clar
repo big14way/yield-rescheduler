@@ -4,17 +4,13 @@
 
 (define-constant CONTRACT_OWNER tx-sender)
 (define-constant ERR_NOT_AUTHORIZED (err u8001))
-(define-constant ERR_SCHEDULE_PAUSED (err u220))
 (define-constant ERR_POOL_NOT_FOUND (err u8002))
-(define-constant ERR_SCHEDULE_PAUSED (err u220))
 (define-constant ERR_INSUFFICIENT_STAKE (err u8003))
-(define-constant ERR_SCHEDULE_PAUSED (err u220))
 (define-constant ERR_COOLDOWN_ACTIVE (err u8004))
-(define-constant ERR_SCHEDULE_PAUSED (err u220))
 (define-constant ERR_NO_REWARDS (err u8005))
-(define-constant ERR_SCHEDULE_PAUSED (err u220))
 (define-constant ERR_INVALID_AMOUNT (err u8006))
-(define-constant ERR_SCHEDULE_PAUSED (err u220))
+(define-constant ERR_SCHEDULE_PAUSED (err u8007))
+(define-constant ERR_COMPOUND_FAILED (err u8008))
 
 (define-constant SCHEDULE_LINEAR u0)
 (define-constant SCHEDULE_BONUS_WEEKEND u1)
@@ -25,11 +21,10 @@
 (define-constant ONE_HOUR u3600)
 
 (define-data-var pool-counter uint u0)
-(define-data-var extra-var- uint u)
 (define-data-var total-staked uint u0)
-(define-data-var extra-var- uint u)
 (define-data-var total-rewards-distributed uint u0)
-(define-data-var extra-var- uint u)
+(define-data-var compound-enabled bool true)
+(define-data-var min-compound-amount uint u1000000)
 
 (define-map pools uint {
     name: (string-ascii 64), reward-rate: uint, schedule-type: uint,
@@ -217,6 +212,71 @@
         (map-set pools pool-id (merge pool { active: active }))
         (print { event: "pool-status-changed", pool-id: pool-id, active: active, admin: tx-sender })
         (ok true)))
-(define-data-var analytics-2 uint u2)
-(define-data-var analytics-3 uint u3)
-(define-data-var analytics-4 uint u4)
+
+;; Compound rewards - automatically restake earned rewards
+(define-public (compound-rewards (pool-id uint))
+    (let ((stake-data (unwrap! (map-get? stakes { pool-id: pool-id, staker: tx-sender }) ERR_INSUFFICIENT_STAKE))
+          (pool (unwrap! (map-get? pools pool-id) ERR_POOL_NOT_FOUND))
+          (pending-rewards (calculate-pending-rewards pool-id tx-sender)))
+        ;; Validations
+        (asserts! (var-get compound-enabled) ERR_SCHEDULE_PAUSED)
+        (asserts! (get active pool) ERR_SCHEDULE_PAUSED)
+        (asserts! (> pending-rewards u0) ERR_NO_REWARDS)
+        (asserts! (>= pending-rewards (var-get min-compound-amount)) ERR_INVALID_AMOUNT)
+
+        ;; Update stake with compounded rewards
+        (map-set stakes
+            { pool-id: pool-id, staker: tx-sender }
+            (merge stake-data {
+                amount: (+ (get amount stake-data) pending-rewards),
+                last-claim: stacks-block-time,
+                rewards-earned: (+ (get rewards-earned stake-data) pending-rewards)
+            }))
+
+        ;; Update pool total staked
+        (map-set pools pool-id (merge pool {
+            total-staked: (+ (get total-staked pool) pending-rewards)
+        }))
+
+        ;; Update global stats
+        (var-set total-staked (+ (var-get total-staked) pending-rewards))
+        (var-set total-rewards-distributed (+ (var-get total-rewards-distributed) pending-rewards))
+
+        (print { event: "rewards-compounded", pool-id: pool-id, staker: tx-sender, amount: pending-rewards, new-stake: (+ (get amount stake-data) pending-rewards) })
+        (ok pending-rewards)))
+
+;; Toggle compound feature (admin only)
+(define-public (toggle-compound)
+    (begin
+        (asserts! (is-eq tx-sender CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
+        (var-set compound-enabled (not (var-get compound-enabled)))
+        (print { event: "compound-toggled", enabled: (var-get compound-enabled), admin: tx-sender })
+        (ok (var-get compound-enabled))))
+
+;; Set minimum compound amount (admin only)
+(define-public (set-min-compound-amount (amount uint))
+    (begin
+        (asserts! (is-eq tx-sender CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
+        (asserts! (> amount u0) ERR_INVALID_AMOUNT)
+        (var-set min-compound-amount amount)
+        (print { event: "min-compound-amount-updated", amount: amount, admin: tx-sender })
+        (ok true)))
+
+;; Get compound configuration
+(define-read-only (get-compound-config)
+    {
+        enabled: (var-get compound-enabled),
+        min-amount: (var-get min-compound-amount)
+    })
+
+;; Calculate compound APY (Annual Percentage Yield) for a stake
+(define-read-only (calculate-compound-apy (pool-id uint) (staker principal))
+    (match (map-get? stakes { pool-id: pool-id, staker: staker })
+        stake-data (match (map-get? pools pool-id)
+            pool-data (let ((daily-rate (/ (* (get reward-rate pool-data) (get-current-multiplier pool-id)) u10000))
+                           (annual-simple (* daily-rate u365))
+                           ;; Compound formula: (1 + r/n)^n - 1, where n = 365 (daily compounding)
+                           (compound-apy (- (+ u10000 (/ (* annual-simple u10000) u365)) u10000)))
+                (ok compound-apy))
+            (err ERR_POOL_NOT_FOUND))
+        (err ERR_INSUFFICIENT_STAKE)))
