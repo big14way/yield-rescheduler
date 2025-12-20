@@ -13,6 +13,9 @@
 (define-constant ERR_COMPOUND_FAILED (err u8008))
 (define-constant ERR_MIGRATION_FAILED (err u8009))
 (define-constant ERR_SAME_POOL (err u8010))
+(define-constant ERR_EMERGENCY_ACTIVE (err u8011))
+(define-constant ERR_TIMELOCK_ACTIVE (err u8012))
+(define-constant ERR_NO_EMERGENCY (err u8013))
 
 (define-constant SCHEDULE_LINEAR u0)
 (define-constant SCHEDULE_BONUS_WEEKEND u1)
@@ -29,6 +32,11 @@
 (define-data-var min-compound-amount uint u1000000)
 (define-data-var migration-enabled bool true)
 (define-data-var migration-fee-percent uint u100)
+(define-data-var emergency-pause-active bool false)
+(define-data-var emergency-activated-at uint u0)
+(define-data-var emergency-unlock-time uint u0)
+(define-data-var total-emergency-withdrawals uint u0)
+(define-data-var emergency-timelock uint u172800)
 
 (define-map pools uint {
     name: (string-ascii 64), reward-rate: uint, schedule-type: uint,
@@ -380,4 +388,115 @@
     {
         enabled: (var-get migration-enabled),
         fee-percent: (var-get migration-fee-percent)
+    })
+
+;; ========================================
+;; Emergency Pause Functions
+;; ========================================
+
+;; Activate emergency pause (admin only)
+(define-public (activate-emergency-pause)
+    (let ((current-time stacks-block-time)
+          (unlock-time (+ current-time (var-get emergency-timelock))))
+        (asserts! (is-eq tx-sender CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
+        (asserts! (not (var-get emergency-pause-active)) ERR_EMERGENCY_ACTIVE)
+
+        (var-set emergency-pause-active true)
+        (var-set emergency-activated-at current-time)
+        (var-set emergency-unlock-time unlock-time)
+
+        (print {
+            event: "emergency-pause-activated",
+            activated-at: current-time,
+            unlock-time: unlock-time,
+            timelock-duration: (var-get emergency-timelock),
+            admin: tx-sender,
+            timestamp: current-time
+        })
+
+        (ok unlock-time)))
+
+;; Emergency withdrawal (available during pause after timelock)
+(define-public (emergency-withdraw (pool-id uint))
+    (let ((stake-info (unwrap! (map-get? stakes { pool-id: pool-id, staker: tx-sender }) ERR_INSUFFICIENT_STAKE))
+          (pool (unwrap! (map-get? pools pool-id) ERR_POOL_NOT_FOUND))
+          (amount (get amount stake-info))
+          (current-time stacks-block-time))
+        ;; Validations
+        (asserts! (var-get emergency-pause-active) ERR_NO_EMERGENCY)
+        (asserts! (>= current-time (var-get emergency-unlock-time)) ERR_TIMELOCK_ACTIVE)
+        (asserts! (> amount u0) ERR_INSUFFICIENT_STAKE)
+
+        ;; Remove stake
+        (map-delete stakes { pool-id: pool-id, staker: tx-sender })
+
+        ;; Update pool
+        (map-set pools pool-id (merge pool {
+            total-staked: (- (get total-staked pool) amount)
+        }))
+
+        ;; Update global stats
+        (var-set total-staked (- (var-get total-staked) amount))
+        (var-set total-emergency-withdrawals (+ (var-get total-emergency-withdrawals) u1))
+
+        (print {
+            event: "emergency-withdrawal",
+            pool-id: pool-id,
+            staker: tx-sender,
+            amount: amount,
+            rewards-forfeited: (get rewards-earned stake-info),
+            timestamp: current-time
+        })
+
+        (ok amount)))
+
+;; Deactivate emergency pause (admin only)
+(define-public (deactivate-emergency-pause)
+    (begin
+        (asserts! (is-eq tx-sender CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
+        (asserts! (var-get emergency-pause-active) ERR_NO_EMERGENCY)
+
+        (var-set emergency-pause-active false)
+
+        (print {
+            event: "emergency-pause-deactivated",
+            duration: (- stacks-block-time (var-get emergency-activated-at)),
+            total-emergency-withdrawals: (var-get total-emergency-withdrawals),
+            admin: tx-sender,
+            timestamp: stacks-block-time
+        })
+
+        (ok true)))
+
+;; Set emergency timelock duration (admin only)
+(define-public (set-emergency-timelock (duration uint))
+    (begin
+        (asserts! (is-eq tx-sender CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
+        (asserts! (>= duration ONE_DAY) ERR_INVALID_AMOUNT)
+        (asserts! (<= duration (* u7 ONE_DAY)) ERR_INVALID_AMOUNT) ;; Max 7 days
+
+        (var-set emergency-timelock duration)
+
+        (print {
+            event: "emergency-timelock-updated",
+            duration: duration,
+            admin: tx-sender,
+            timestamp: stacks-block-time
+        })
+
+        (ok true)))
+
+;; Get emergency pause status
+(define-read-only (get-emergency-status)
+    {
+        active: (var-get emergency-pause-active),
+        activated-at: (var-get emergency-activated-at),
+        unlock-time: (var-get emergency-unlock-time),
+        timelock-duration: (var-get emergency-timelock),
+        total-withdrawals: (var-get total-emergency-withdrawals),
+        time-until-unlock: (if (var-get emergency-pause-active)
+                              (if (> (var-get emergency-unlock-time) stacks-block-time)
+                                  (- (var-get emergency-unlock-time) stacks-block-time)
+                                  u0)
+                              u0)
     })
