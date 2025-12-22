@@ -16,6 +16,11 @@ path = "contracts/reward-token.clar"
 clarity_version = 4
 epoch = 3.3
 
+[contracts.yield-optimizer]
+path = "contracts/yield-optimizer.clar"
+clarity_version = 4
+epoch = 3.3
+
 [repl.analysis]
 passes = ["check_checker"]
 
