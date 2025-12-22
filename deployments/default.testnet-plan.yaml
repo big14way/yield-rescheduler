@@ -11,14 +11,21 @@ plan:
         - contract-publish:
             contract-name: reward-token
             expected-sender: ST1S3R27KWS78BZQJ3XF3BQK89VZTHHCPZMD3TTTK
-            cost: 22150
+            cost: 24207135
             path: contracts/reward-token.clar
+            anchor-block-only: true
+            clarity-version: 4
+        - contract-publish:
+            contract-name: yield-optimizer
+            expected-sender: ST1S3R27KWS78BZQJ3XF3BQK89VZTHHCPZMD3TTTK
+            cost: 24530188
+            path: contracts/yield-optimizer.clar
             anchor-block-only: true
             clarity-version: 4
         - contract-publish:
             contract-name: yield-scheduler
             expected-sender: ST1S3R27KWS78BZQJ3XF3BQK89VZTHHCPZMD3TTTK
-            cost: 115130
+            cost: 24665521
             path: contracts/yield-scheduler.clar
             anchor-block-only: true
             clarity-version: 4
